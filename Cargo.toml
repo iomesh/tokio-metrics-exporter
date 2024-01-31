@@ -1,0 +1,19 @@
+[package]
+name = "tokio-metrics-exporter"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["rt"]
+rt = ["tokio"]
+
+[dependencies]
+prometheus-client = { git = "https://github.com/iomesh/prometheus_client_rust.git", tag = "v0.22.0-1"}
+tokio-metrics = { version = "0.3.1", features = ["rt"] }
+tokio = { version = "1.32.0", features = ["rt"], optional = true }
+
+[dev-dependencies]
+hyper = { version = "0.14.27", features = ["full"] }
+tokio = { version = "1.32.0", features = ["rt", "macros", "rt-multi-thread"]}
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", features = ["json", "env-filter", "time"] }
