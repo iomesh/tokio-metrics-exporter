@@ -1,6 +1,7 @@
 mod task;
 
 pub use task::TaskCollector;
+pub use tokio_metrics::TaskMonitor;
 
 macro_rules! cfg_rt {
     ($($item:item)*) => {
@@ -14,4 +15,5 @@ macro_rules! cfg_rt {
 cfg_rt! {
     mod runtime;
     pub use runtime::RuntimeCollector;
+    pub use tokio_metrics::RuntimeMonitor;
 }

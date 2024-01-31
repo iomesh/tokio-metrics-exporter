@@ -14,10 +14,10 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let handle = tokio::runtime::Handle::current();
-    let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+    let runtime_monitor = tokio_metrics_exporter::RuntimeMonitor::new(&handle);
     let runtime_collector = tokio_metrics_exporter::RuntimeCollector::new(runtime_monitor);
 
-    let task_monitor = tokio_metrics::TaskMonitor::new();
+    let task_monitor = tokio_metrics_exporter::TaskMonitor::new();
     let task_collector = tokio_metrics_exporter::TaskCollector::new();
     let worker1_monitor = task_monitor.clone();
     task_collector
