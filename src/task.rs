@@ -50,15 +50,13 @@ impl TaskCollector {
         self.intervals.write().unwrap().remove(label);
     }
 
-    pub fn get(&self, label: &str) -> tokio_metrics::TaskMetrics {
-        let data = self
-            .intervals
+    pub fn get(&self, label: &str) -> Option<tokio_metrics::TaskMetrics> {
+        self.intervals
             .write()
             .unwrap()
             .get_mut(label)
             .unwrap()
-            .next();
-        data.unwrap()
+            .next()
     }
 
     fn encode(&self, mut encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
@@ -88,7 +86,7 @@ impl TaskCollector {
         }
 
         for label in &labels {
-            let interval = self.get(label);
+            let interval = self.get(label).unwrap();
             self.metrics.update(label, interval);
         }
 
@@ -331,5 +329,55 @@ impl TaskMetrics {
         inc_by!(total_long_delay_count, "u64");
         inc_by!(total_short_delay_duration, "dur");
         inc_by!(total_long_delay_duration, "dur");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add() {
+        let collector = TaskCollector::new();
+        let label = "test_label";
+        let monitor = TaskMonitor::new();
+        let result = collector.add(label, monitor);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_add_existing_label() {
+        let collector = TaskCollector::new();
+        let label = "test_label";
+        let monitor = TaskMonitor::new();
+        collector.add(label, monitor).unwrap();
+
+        let monitor2 = TaskMonitor::new();
+        let result = collector.add(label, monitor2);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::AlreadyExists);
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut collector = TaskCollector::new();
+        let label = "test_label";
+        let monitor = TaskMonitor::new();
+        collector.add(label, monitor).unwrap();
+
+        collector.remove(label);
+        let intervals = collector.intervals.read().unwrap();
+        assert!(!intervals.contains_key(label));
+    }
+
+    #[test]
+    fn test_get() {
+        let collector = TaskCollector::new();
+        let label = "test_label";
+        let monitor = TaskMonitor::new();
+        collector.add(label, monitor).unwrap();
+
+        let task_metrics = collector.get(label);
+        assert!(task_metrics.is_some());
     }
 }
