@@ -1,5 +1,6 @@
 mod task;
 
+pub use task::global_collector as global_task_collector;
 pub use task::TaskCollector;
 pub use tokio_metrics::TaskMonitor;
 

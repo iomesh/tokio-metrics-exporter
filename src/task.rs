@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     io::{Error, ErrorKind},
-    sync::RwLock,
+    sync::{OnceLock, RwLock},
 };
 
 use prometheus_client::{
@@ -13,18 +13,15 @@ use prometheus_client::{
 };
 use tokio_metrics::TaskMonitor;
 
+pub fn global_collector() -> &'static TaskCollector {
+    static DEFAULT_COLLECTOR: OnceLock<TaskCollector> = OnceLock::new();
+    DEFAULT_COLLECTOR.get_or_init(TaskCollector::new)
+}
+
 pub struct TaskCollector {
     metrics: TaskMetrics,
     intervals:
         RwLock<HashMap<String, Box<dyn Iterator<Item = tokio_metrics::TaskMetrics> + Send + Sync>>>,
-}
-
-impl Debug for TaskCollector {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TaskCollector")
-            .field("metrics", &self.metrics)
-            .finish()
-    }
 }
 
 impl TaskCollector {
@@ -63,15 +60,7 @@ impl TaskCollector {
             .next();
         data.unwrap()
     }
-}
 
-impl Default for TaskCollector {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Collector for TaskCollector {
     fn encode(&self, mut encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
         macro_rules! encode {
             ($name:ident, $description:expr, $unit:expr, $encoder:expr, $type:expr, $labels:expr,) => {
@@ -251,6 +240,31 @@ impl Collector for TaskCollector {
     }
 }
 
+impl Default for TaskCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Debug for TaskCollector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskCollector")
+            .field("metrics", &self.metrics)
+            .finish()
+    }
+}
+
+impl Collector for TaskCollector {
+    fn encode(&self, encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
+        self.encode(encoder)
+    }
+}
+
+impl Collector for &'static TaskCollector {
+    fn encode(&self, encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
+        (*self).encode(encoder)
+    }
+}
 // Current RuntimeMetrics
 // https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.TaskMetrics.html
 #[derive(Debug, Default)]
