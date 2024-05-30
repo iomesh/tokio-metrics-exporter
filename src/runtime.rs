@@ -1,10 +1,9 @@
-use std::sync::atomic::AtomicU64;
 use std::sync::Mutex;
 
 use prometheus_client::{
     collector::Collector,
     encoding::{DescriptorEncoder, EncodeMetric},
-    metrics::{counter::Counter, gauge::Gauge},
+    metrics::{counter::Counter, gauge::Gauge, histogram::Histogram},
     registry::Unit,
 };
 use tokio_metrics::{RuntimeIntervals, RuntimeMonitor};
@@ -267,18 +266,50 @@ impl Collector for RuntimeCollector {
     }
 }
 
+const BUCKETS: [f64; 15] = [
+    0.000010, 0.000025, 0.000050, 0.000100, 0.000250, 0.000500, 0.001, 0.002, 0.005, 0.010, 0.100,
+    0.250, 0.500, 1.0, 5.0,
+];
+
+macro_rules! default_value {
+    (Gauge) => {
+        Gauge::default()
+    };
+    (Counter) => {
+        Counter::default()
+    };
+    (Histogram) => {
+        Histogram::new(BUCKETS.iter().copied())
+    };
+}
+
+macro_rules! metrics {
+    ($($name:ident: $type:ident),* $(,)?) => {
+        #[derive(Debug)]
+        struct RuntimeMetrics {
+            $($name: $type,)*
+        }
+
+        impl Default for RuntimeMetrics {
+            fn default() -> Self {
+                Self {
+                    $($name: default_value!($type),)*
+                }
+            }
+        }
+    };
+}
+
 // Current RuntimeMetrics
 // https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html
-#[derive(Debug, Default)]
-struct RuntimeMetrics {
+metrics! {
     workers_count: Gauge,
     total_park_count: Counter,
     max_park_count: Gauge,
     min_park_count: Gauge,
-    mean_poll_duration: Gauge<f64, AtomicU64>,
-    mean_poll_duration_worker_min: Gauge<f64, AtomicU64>,
-    mean_poll_duration_worker_max: Gauge<f64, AtomicU64>,
-    // poll_count_histogram: Histogram,
+    mean_poll_duration: Histogram,
+    mean_poll_duration_worker_min: Histogram,
+    mean_poll_duration_worker_max: Histogram,
     total_noop_count: Counter,
     max_noop_count: Gauge,
     min_noop_count: Gauge,
@@ -298,14 +329,14 @@ struct RuntimeMetrics {
     total_polls_count: Counter,
     max_polls_count: Gauge,
     min_polls_count: Gauge,
-    total_busy_duration: Counter<f64, AtomicU64>,
-    max_busy_duration: Gauge<f64, AtomicU64>,
-    min_busy_duration: Gauge<f64, AtomicU64>,
+    total_busy_duration: Histogram,
+    max_busy_duration: Histogram,
+    min_busy_duration: Histogram,
     injection_queue_depth: Gauge,
     total_local_queue_depth: Gauge,
     max_local_queue_depth: Gauge,
     min_local_queue_depth: Gauge,
-    elapsed: Gauge<f64, AtomicU64>,
+    elapsed: Histogram,
     budget_forced_yield_count: Counter,
     io_driver_ready_count: Counter,
 }
@@ -316,16 +347,13 @@ impl RuntimeMetrics {
             ( $field:ident, "u64" ) => {{
                 self.$field.inc_by(data.$field as u64);
             }};
-            ( $field:ident, "dur" ) => {{
-                self.$field.inc_by(data.$field.as_secs_f64());
-            }};
         }
         macro_rules! set_by {
             ( $field:ident, "i64" ) => {{
                 self.$field.set(data.$field as i64);
             }};
             ( $field:ident, "dur" ) => {{
-                self.$field.set(data.$field.as_secs_f64());
+                self.$field.observe(data.$field.as_secs_f64());
             }};
         }
 
@@ -336,8 +364,6 @@ impl RuntimeMetrics {
         set_by!(mean_poll_duration, "dur");
         set_by!(mean_poll_duration_worker_min, "dur");
         set_by!(mean_poll_duration_worker_max, "dur");
-        // TODO: poll_count_hist
-        // self.poll_count_histogram.observe(data.)
         inc_by!(total_noop_count, "u64");
         set_by!(max_noop_count, "i64");
         set_by!(min_noop_count, "i64");
@@ -357,14 +383,14 @@ impl RuntimeMetrics {
         inc_by!(total_polls_count, "u64");
         set_by!(max_polls_count, "i64");
         set_by!(min_polls_count, "i64");
-        inc_by!(total_busy_duration, "dur");
+        set_by!(total_busy_duration, "dur");
         set_by!(max_busy_duration, "dur");
         set_by!(min_busy_duration, "dur");
         set_by!(injection_queue_depth, "i64");
         set_by!(total_local_queue_depth, "i64");
         set_by!(max_local_queue_depth, "i64");
         set_by!(min_local_queue_depth, "i64");
-        inc_by!(elapsed, "dur");
+        set_by!(elapsed, "dur");
         inc_by!(budget_forced_yield_count, "u64");
         inc_by!(io_driver_ready_count, "u64");
     }
